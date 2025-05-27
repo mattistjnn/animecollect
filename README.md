@@ -1,50 +1,103 @@
-# Welcome to your Expo app 👋
+# AnimeCollect
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Une application mobile pour gérer votre collection d'animés, suivre vos séries et découvrir les nouveautés.
 
-## Get started
+## 📱 Fonctionnalités
 
-1. Install dependencies
+- **Découverte** : Explorez les dernières sorties d'animés
+- **Collection personnelle** : Gérez votre collection d'animés (en cours, terminés, planifiés...)
+- **Suivi** : Marquez les épisodes que vous avez visionnés
+- **Recherche** : Trouvez facilement n'importe quel anime
+- **Liste à regarder** : Gardez une liste des épisodes que vous souhaitez voir
+- **Mode hors ligne** : Consultez votre collection même sans connexion internet
+
+## 🛠️ Technologies utilisées
+
+- **React Native** avec **Expo**
+- **Expo Router** pour la navigation
+- **SQLite** avec **Drizzle ORM** pour la base de données locale
+- **TWRNC** (Tailwind CSS pour React Native) pour le stylisme
+- **Kitsu API** pour les données d'animés
+
+## 🚀 Installation
+
+### Prérequis
+
+- Node.js (version 16 ou supérieure)
+- npm ou yarn
+- Expo CLI
+- Android Studio (pour l'émulateur Android) ou Xcode (pour le simulateur iOS)
+
+### Étapes d'installation
+
+1. Clonez le dépôt :
+
+   ```bash
+   git clone https://github.com/votre-username/animecollect.git
+   cd animecollect
+   ```
+
+2. Installez les dépendances :
 
    ```bash
    npm install
+   # ou
+   yarn install
    ```
 
-2. Start the app
+3. Lancez l'application en mode développement :
 
    ```bash
-    npx expo start
+   npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+4. Suivez les instructions dans la console pour ouvrir l'application sur un appareil ou un émulateur.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 📂 Structure du projet
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+app/
+├── (tabs)/                   # Écrans principaux
+├── anime/                    # Détails des animés
+├── collection/               # Vue de la collection
+├── components/               # Composants réutilisables
+├── hooks/                    # Hooks personnalisés
+├── services/                 # Services (API, base de données)
+├── utils/                    # Utilitaires
+└── db/                       # Configuration de la base de données
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 📝 Notes importantes
 
-## Learn more
+- L'application utilise Expo SDK 52 (la version 53 est encore en bêta)
+- Le mode hors ligne permet uniquement de consulter les données déjà enregistrées
+- Les APIs d'animés ne proposent généralement pas les titres en français. L'application affiche les titres originaux.
 
-To learn more about developing your project with Expo, look at the following resources:
+## 🧪 Tests
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Exécutez les tests avec la commande suivante :
 
-## Join the community
+```bash
+npm test
+# ou
+yarn test
+```
 
-Join our community of developers creating universal apps.
+## 🛣️ Améliorations futures
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Ajout de filtres et de tris avancés pour la collection
+- Support pour les saisons et catégorisation des épisodes spéciaux/OVAs
+- Personnalisation des titres et des informations
+- Système de rappels pour les nouvelles sorties
+- Synchronisation avec des services externes
+
+## 📄 Licence
+
+Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
+
+## 🙏 Remerciements
+
+- [Kitsu API](https://kitsu.docs.apiary.io/) pour les données d'animés
+- [Expo](https://expo.dev/) pour le framework
+- [TailwindCSS](https://tailwindcss.com/) et [TWRNC](https://github.com/jaredh159/tailwind-react-native-classnames) pour le stylisme
+- [Drizzle ORM](https://orm.drizzle.team/) pour l'ORM SQLite
