@@ -1,38 +1,41 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
-import { useUserCollection } from '@/hooks/useDataBase'; // Corrigé le nom du hook
+import { useUserCollection } from '@/hooks/useDataBase';
 import AnimeCard from '@/components/AnimeCard';
 import LoadingIndicator from '@/components/ui/LoadingIndicator';
 import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as databaseService from '@/services/databaseService';
 
-type FilterStatus = 'all' | 'watching' | 'completed' | 'planned' | 'dropped'; // Corrigé 'complreted'
+type FilterStatus = 'all' | 'watching' | 'completed' | 'planned' | 'dropped';
 
 export default function CollectionScreen() {
   const { collection, isLoading, error, refresh } = useUserCollection();
   const [filter, setFilter] = useState<FilterStatus>('all');
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const filteredCollection = collection.filter(item => {
     if (filter === 'all') return true;
     return item.collection.status === filter;
   });
 
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await refresh();
-    } catch (error) {
-      console.error('Erreur lors du rafraîchissement:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
+  const onRefresh = useCallback(() => {
+    refresh();
   }, [refresh]);
 
-  const onRefresh = useCallback(() => {
-    handleRefresh();
-  }, [handleRefresh]);
+  const fetchCollection = useCallback(async () => {
+    try {
+      const userCollection = await databaseService.getUserCollection();
+      console.log('📊 Collection récupérée:', userCollection);
+      console.log('📊 Premier item:', userCollection[0]);
+      if (userCollection[0]) {
+        console.log('📊 Anime data:', userCollection[0].anime);
+        console.log('📊 Poster image:', userCollection[0].anime.posterImage);
+      }
+    } catch (err) {
+      console.error('Erreur lors de la récupération de la collection:', err);
+    }
+  }, []);
 
   const renderFilterButton = (status: FilterStatus, label: string, icon: string) => (
     <TouchableOpacity
@@ -65,69 +68,36 @@ export default function CollectionScreen() {
     </TouchableOpacity>
   );
 
-  const renderHeader = () => (
-    <View style={tw`px-4 pt-2`}>
-      <View style={tw`flex-row items-center justify-between mb-2`}>
-        <Text style={tw`text-xl font-bold text-gray-800 dark:text-white`}>
+  return (
+    <SafeAreaView style={tw`flex-1 bg-gray-100 dark:bg-gray-900`} edges={['bottom']}>
+      <View style={tw`px-4 pt-2`}>
+        <Text style={tw`text-xl font-bold text-gray-800 dark:text-white mb-2`}>
           Ma Collection
         </Text>
         
-        {/* Bouton de rafraîchissement */}
-        <TouchableOpacity
-          style={[
-            tw`bg-blue-500 px-3 py-2 rounded-lg flex-row items-center`,
-            isRefreshing && tw`opacity-70`
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={[
+            { status: 'all', label: 'Tous', icon: 'list-outline' },
+            { status: 'watching', label: 'En cours', icon: 'eye-outline' },
+            { status: 'completed', label: 'Terminés', icon: 'checkmark-circle-outline' },
+            { status: 'planned', label: 'Planifiés', icon: 'time-outline' },
+            { status: 'dropped', label: 'Abandonnés', icon: 'close-circle-outline' }
           ]}
-          onPress={handleRefresh}
-          disabled={isRefreshing}
-          activeOpacity={0.7}
-        >
-          <Ionicons 
-            name={isRefreshing ? "hourglass-outline" : "refresh-outline"} 
-            size={16} 
-            color="#ffffff" 
-            style={tw`mr-1`} 
-          />
-          <Text style={tw`text-white text-xs font-medium`}>
-            {isRefreshing ? 'Actualisation...' : 'Actualiser'}
-          </Text>
-        </TouchableOpacity>
+          keyExtractor={(item) => item.status}
+          renderItem={({ item }) => renderFilterButton(item.status as FilterStatus, item.label, item.icon)}
+          style={tw`mb-4`}
+        />
       </View>
-      
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        data={[
-          { status: 'all', label: 'Tous', icon: 'list-outline' },
-          { status: 'watching', label: 'En cours', icon: 'eye-outline' },
-          { status: 'completed', label: 'Terminés', icon: 'checkmark-circle-outline' },
-          { status: 'planned', label: 'Planifiés', icon: 'time-outline' },
-          { status: 'dropped', label: 'Abandonnés', icon: 'close-circle-outline' }
-        ]}
-        keyExtractor={(item) => item.status}
-        renderItem={({ item }) => renderFilterButton(item.status as FilterStatus, item.label, item.icon)}
-        style={tw`mb-4`}
-      />
-    </View>
-  );
-
-  return (
-    <SafeAreaView style={tw`flex-1 bg-gray-100 dark:bg-gray-900`} edges={['bottom']}>
-      {renderHeader()}
 
       {isLoading ? (
         <LoadingIndicator size="large" text="Chargement de votre collection..." />
       ) : error ? (
         <View style={tw`p-4`}>
-          <Text style={tw`text-red-500 dark:text-red-400 text-center mb-2`}>
+          <Text style={tw`text-red-500 dark:text-red-400 text-center`}>
             Erreur de chargement. Veuillez réessayer.
           </Text>
-          <TouchableOpacity
-            style={tw`bg-blue-500 px-4 py-2 rounded-lg self-center`}
-            onPress={handleRefresh}
-          >
-            <Text style={tw`text-white font-medium`}>Réessayer</Text>
-          </TouchableOpacity>
         </View>
       ) : filteredCollection.length === 0 ? (
         <View style={tw`flex-1 items-center justify-center p-4`}>
@@ -150,26 +120,11 @@ export default function CollectionScreen() {
                     : 'abandonné'
                 }`}
           </Text>
-          <Text style={tw`text-gray-500 dark:text-gray-400 text-center mt-2 mb-4`}>
+          <Text style={tw`text-gray-500 dark:text-gray-400 text-center mt-2`}>
             {filter === 'all'
               ? 'Ajoutez des animes depuis l\'écran de recherche'
               : 'Ajoutez des animes dans cette catégorie depuis l\'écran de détails'}
           </Text>
-          
-          {/* Bouton de rafraîchissement dans l'état vide */}
-          <TouchableOpacity
-            style={tw`bg-blue-500 px-4 py-2 rounded-lg flex-row items-center`}
-            onPress={handleRefresh}
-            disabled={isRefreshing}
-          >
-            <Ionicons 
-              name="refresh-outline" 
-              size={16} 
-              color="#ffffff" 
-              style={tw`mr-2`} 
-            />
-            <Text style={tw`text-white font-medium`}>Actualiser la collection</Text>
-          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -206,7 +161,7 @@ export default function CollectionScreen() {
           numColumns={2}
           contentContainerStyle={styles.grid}
           refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={isLoading} onRefresh={onRefresh} />
           }
         />
       )}
