@@ -1,7 +1,6 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, Image, StyleSheet, FlatList, TouchableOpacity, ScrollView, RefreshControl, Modal, Pressable, Alert } from 'react-native';
 import { useRouter, useGlobalSearchParams } from 'expo-router';
-import { useAnimeDetails } from '@/hooks/useAnimeApi';
 import { useWatchedEpisodes, useUserCollection, useWatchlist } from '@/hooks/useDataBase';
 import EpisodeCard from '@/components/EpisodeCard';
 import LoadingIndicator from '@/components/ui/LoadingIndicator';
@@ -10,18 +9,8 @@ import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  saveAnime, 
-  saveEpisode, 
-  markEpisodeAsWatched, 
-  addEpisodeToWatchlist, 
-  removeEpisodeFromWatchlist,
-  isEpisodeWatched,
-  isEpisodeInWatchlist,
-  getAnimeById,
-  getEpisodesByAnimeId,
-  generateId
-} from '@/services/databaseService';
+import * as databaseService from '@/services/databaseService';
+import * as apiService from '@/services/apiService';
 
 export default function AnimeDetailScreen() {
   const { id } = useGlobalSearchParams();
@@ -29,133 +18,209 @@ export default function AnimeDetailScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   
-  // État pour gérer les données locales vs API
-  const [isLocalAnime, setIsLocalAnime] = useState(false);
-  const [localAnimeData, setLocalAnimeData] = useState<any>(null);
-  
-  // Essayer d'abord de récupérer depuis l'API (pour les nouveaux animes)
-  const { anime: apiAnime, episodes: apiEpisodes, isLoading, isLoadingEpisodes, error, refresh, refreshEpisodes } = useAnimeDetails(animeId);
-  
-  // Variables pour les données finales à utiliser
-  const [finalAnime, setFinalAnime] = useState<any>(null);
-  const [finalEpisodes, setFinalEpisodes] = useState<any[]>([]);
+  // États pour gérer les données
+  const [anime, setAnime] = useState<any>(null);
+  const [episodes, setEpisodes] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLocalData, setIsLocalData] = useState(false);
+  const [localAnimeId, setLocalAnimeId] = useState<string | null>(null);
   
   const { watchedEpisodes, isLoading: isLoadingWatched, markAsWatched, isWatched } = useWatchedEpisodes();
   const { collection, addToCollection, updateInCollection, removeFromCollection } = useUserCollection();
   const { addToWatchlist, removeFromWatchlist } = useWatchlist();
   
   const [modalVisible, setModalVisible] = useState(false);
-  const [localAnimeId, setLocalAnimeId] = useState<string | null>(null);
-  const [localEpisodes, setLocalEpisodes] = useState<any[]>([]);
-  
-  // Essayer de récupérer les données locales si l'API échoue
-  useEffect(() => {
-    const loadAnimeData = async () => {
-      if (error && error.message && error.message.includes('400')) {
-        console.log('API failed, trying to load from local database...');
-        try {
-          // Chercher dans la base locale en utilisant soit l'ID direct soit l'ID Kitsu
-          const localAnime = await getAnimeById(animeId);
-          if (localAnime) {
-            console.log('Found local anime:', localAnime);
-            setIsLocalAnime(true);
-            setLocalAnimeData(localAnime);
-            
-            // Convertir les données locales au format API
-            const convertedAnime = {
-              canonicalTitle: localAnime.title,
-              titles: {
-                ja_jp: localAnime.original_title
-              },
-              synopsis: localAnime.synopsis,
-              posterImage: localAnime.poster_image ? { medium: localAnime.poster_image } : null,
-              coverImage: localAnime.cover_image ? { large: localAnime.cover_image } : null,
-              episodeCount: localAnime.episode_count,
-              status: localAnime.status,
-              startDate: localAnime.start_date,
-              endDate: localAnime.end_date,
-              ageRating: localAnime.age_rating
-            };
-            
-            setFinalAnime(convertedAnime);
-            setLocalAnimeId(localAnime.id);
-            
-            // Récupérer les épisodes locaux
-            const episodes = await getEpisodesByAnimeId(localAnime.id);
-            const convertedEpisodes = episodes.map(ep => ({
-              id: ep.id,
-              number: ep.number,
-              canonicalTitle: ep.title,
-              synopsis: ep.synopsis,
-              airdate: ep.air_date,
-              thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
-              length: ep.length
-            }));
-            
-            setFinalEpisodes(convertedEpisodes);
-            setLocalEpisodes(episodes);
-          }
-        } catch (localError) {
-          console.error('Error loading local anime data:', localError);
-        }
-      } else if (apiAnime) {
-        // Utiliser les données de l'API
-        setFinalAnime(apiAnime);
-        setFinalEpisodes(apiEpisodes);
-        setIsLocalAnime(false);
-      }
-    };
-    
-    loadAnimeData();
-  }, [animeId, error, apiAnime, apiEpisodes]);
+  const [episodesWithStatus, setEpisodesWithStatus] = useState<any[]>([]);
   
   // Trouver l'anime dans la collection de l'utilisateur
   const collectionItem = collection.find(item => 
     item.anime.kitsuId === animeId || item.anime.id === animeId
   );
-  
-  // État local pour les épisodes avec leur statut
-  const [episodesWithStatus, setEpisodesWithStatus] = useState<any[]>([]);
-  
-  // Calculer la progression
-  const watchedCount = watchedEpisodes.length;
-  const totalEpisodes = finalAnime?.episodeCount || finalEpisodes.length;
-  const progress = totalEpisodes > 0 ? (watchedCount / totalEpisodes) * 100 : 0;
-  
-  // Sauvegarder l'anime et les épisodes localement (seulement pour les données API)
+
+  // Fonction pour charger les données de l'anime
+  const loadAnimeData = useCallback(async () => {
+    if (!animeId) return;
+    
+    setIsLoading(true);
+    setError(null);
+    setIsLocalData(false);
+
+    try {
+      console.log('🔍 Chargement anime ID:', animeId);
+      
+      // Essayer d'abord l'API
+      let animeData = null;
+      let isLocal = false;
+      
+      try {
+        console.log('🌐 Tentative API...');
+        const response = await apiService.getAnimeById(animeId);
+        animeData = {
+          id: response.data.id,
+          type: response.data.type,
+          ...response.data.attributes
+        };
+        console.log('✅ Anime récupéré via API');
+        
+      } catch (apiError) {
+        console.log('❌ Erreur API, tentative locale...');
+        
+        // Si l'API échoue, chercher dans la base locale
+        const localAnime = await databaseService.getAnimeById(animeId);
+        
+        if (localAnime) {
+          console.log('✅ Anime trouvé localement:', localAnime.title);
+          
+          // Convertir les données locales au format API
+          animeData = {
+            canonicalTitle: localAnime.title,
+            titles: {
+              ja_jp: localAnime.original_title
+            },
+            synopsis: localAnime.synopsis,
+            posterImage: localAnime.poster_image ? { medium: localAnime.poster_image } : null,
+            coverImage: localAnime.cover_image ? { large: localAnime.cover_image } : null,
+            episodeCount: localAnime.episode_count,
+            status: localAnime.status,
+            startDate: localAnime.start_date,
+            endDate: localAnime.end_date,
+            ageRating: localAnime.age_rating
+          };
+          
+          isLocal = true;
+          setLocalAnimeId(localAnime.id);
+        } else {
+          throw new Error('Anime non trouvé');
+        }
+      }
+      
+      if (animeData) {
+        setAnime(animeData);
+        setIsLocalData(isLocal);
+      }
+      
+    } catch (err) {
+      console.error('❌ Erreur lors du chargement de l\'anime:', err);
+      setError('Erreur lors du chargement des détails');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [animeId]);
+
+  // Fonction pour charger les épisodes
+  const loadEpisodesData = useCallback(async () => {
+    if (!animeId) return;
+    
+    setIsLoadingEpisodes(true);
+
+    try {
+      console.log('🔍 Chargement des épisodes...');
+      let episodesData = [];
+      
+      if (isLocalData) {
+        // Si on utilise des données locales, récupérer les épisodes localement
+        console.log('📁 Récupération des épisodes depuis la base locale...');
+        
+        const localEpisodes = await databaseService.getEpisodesByAnimeId(animeId);
+        episodesData = localEpisodes.map(ep => ({
+          id: ep.id,
+          number: ep.number,
+          canonicalTitle: ep.title,
+          synopsis: ep.synopsis,
+          airdate: ep.air_date,
+          thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
+          length: ep.length
+        }));
+        
+        console.log(`✅ ${episodesData.length} épisodes récupérés localement`);
+        
+      } else {
+        // Sinon, essayer l'API avec fallback local
+        try {
+          console.log('🌐 Récupération des épisodes via API...');
+          const response = await apiService.getAnimeEpisodes(animeId);
+          episodesData = response.data.map(episode => ({
+            id: episode.id,
+            type: episode.type,
+            ...episode.attributes
+          }));
+          console.log(`✅ ${episodesData.length} épisodes récupérés via API`);
+          
+        } catch (apiError) {
+          console.log('❌ Erreur API pour les épisodes, tentative locale...');
+          
+          // Fallback vers les données locales
+          const localEpisodes = await databaseService.getEpisodesByAnimeId(animeId);
+          episodesData = localEpisodes.map(ep => ({
+            id: ep.id,
+            number: ep.number,
+            canonicalTitle: ep.title,
+            synopsis: ep.synopsis,
+            airdate: ep.air_date,
+            thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
+            length: ep.length
+          }));
+          
+          console.log(`✅ ${episodesData.length} épisodes récupérés localement (fallback)`);
+        }
+      }
+      
+      setEpisodes(episodesData);
+      
+    } catch (err) {
+      console.error('❌ Erreur lors de la récupération des épisodes:', err);
+      setEpisodes([]);
+    } finally {
+      setIsLoadingEpisodes(false);
+    }
+  }, [animeId, isLocalData]);
+
+  // Charger les données au montage
+  useEffect(() => {
+    loadAnimeData();
+  }, [loadAnimeData]);
+
+  // Charger les épisodes après avoir déterminé le type de données
+  useEffect(() => {
+    if (anime) {
+      loadEpisodesData();
+    }
+  }, [anime, loadEpisodesData]);
+
+  // Sauvegarder localement si les données viennent de l'API
   useEffect(() => {
     const saveDataLocally = async () => {
-      if (!isLocalAnime && finalAnime && finalEpisodes.length > 0) {
+      if (!isLocalData && anime && episodes.length > 0) {
         try {
-          console.log('Starting local save for API data...');
+          console.log('💾 Sauvegarde locale des données API...');
           
           // Convertir l'anime pour la base de données locale
           const animeToSave = {
-            id: generateId(),
+            id: databaseService.generateId(),
             kitsu_id: animeId,
-            title: finalAnime.canonicalTitle,
-            original_title: finalAnime.titles?.ja_jp || finalAnime.titles?.en_jp,
-            synopsis: finalAnime.synopsis,
-            poster_image: finalAnime.posterImage?.medium,
-            cover_image: finalAnime.coverImage?.large,
-            episode_count: finalAnime.episodeCount,
-            status: finalAnime.status,
-            start_date: finalAnime.startDate,
-            end_date: finalAnime.endDate,
-            age_rating: finalAnime.ageRating
+            title: anime.canonicalTitle,
+            original_title: anime.titles?.ja_jp || anime.titles?.en_jp,
+            synopsis: anime.synopsis,
+            poster_image: anime.posterImage?.medium,
+            cover_image: anime.coverImage?.large,
+            episode_count: anime.episodeCount,
+            status: anime.status,
+            start_date: anime.startDate,
+            end_date: anime.endDate,
+            age_rating: anime.ageRating
           };
           
-          console.log('Saving anime:', animeToSave);
-          const savedAnimeId = await saveAnime(animeToSave);
-          console.log('Anime saved with ID:', savedAnimeId);
+          const savedAnimeId = await databaseService.saveAnime(animeToSave);
           setLocalAnimeId(savedAnimeId);
           
           // Sauvegarder les épisodes
-          const savedEpisodes = [];
-          for (let i = 0; i < finalEpisodes.length; i++) {
-            const episode = finalEpisodes[i];
+          for (let i = 0; i < episodes.length; i++) {
+            const episode = episodes[i];
             const episodeToSave = {
-              id: generateId(),
+              id: databaseService.generateId(),
               anime_id: savedAnimeId,
               kitsu_id: episode.id,
               number: episode.number,
@@ -166,36 +231,29 @@ export default function AnimeDetailScreen() {
               length: episode.length
             };
             
-            console.log(`Saving episode ${i + 1}:`, episodeToSave);
-            const savedEpisodeId = await saveEpisode(episodeToSave);
-            savedEpisodes.push({
-              ...episodeToSave,
-              id: savedEpisodeId
-            });
+            await databaseService.saveEpisode(episodeToSave);
           }
           
-          console.log('All episodes saved');
-          setLocalEpisodes(savedEpisodes);
+          console.log('✅ Sauvegarde locale terminée');
         } catch (err) {
-          console.error('Erreur lors de la sauvegarde locale:', err);
+          console.error('❌ Erreur lors de la sauvegarde locale:', err);
         }
       }
     };
     
     saveDataLocally();
-  }, [finalAnime, finalEpisodes, animeId, isLocalAnime]);
-  
+  }, [anime, episodes, animeId, isLocalData]);
+
   // Mettre à jour le statut des épisodes
   useEffect(() => {
     const updateEpisodeStatus = async () => {
-      if (localEpisodes.length > 0) {
-        console.log('Updating episode status...');
+      if (episodes.length > 0) {
         const episodesWithStatusData = [];
         
-        for (const episode of localEpisodes) {
+        for (const episode of episodes) {
           try {
-            const watched = await isEpisodeWatched(episode.id);
-            const inWatchlist = await isEpisodeInWatchlist(episode.id);
+            const watched = await databaseService.isEpisodeWatched(episode.id);
+            const inWatchlist = await databaseService.isEpisodeInWatchlist(episode.id);
             
             episodesWithStatusData.push({
               ...episode,
@@ -203,7 +261,6 @@ export default function AnimeDetailScreen() {
               inWatchlist: inWatchlist
             });
           } catch (error) {
-            console.error('Error checking episode status:', error);
             episodesWithStatusData.push({
               ...episode,
               isWatched: false,
@@ -212,43 +269,47 @@ export default function AnimeDetailScreen() {
           }
         }
         
-        console.log('Episode status updated');
         setEpisodesWithStatus(episodesWithStatusData);
       }
     };
     
     updateEpisodeStatus();
-  }, [localEpisodes]);
-  
-  const onRefresh = useCallback(() => {
-    refresh();
-    refreshEpisodes();
-  }, [refresh, refreshEpisodes]);
-  
+  }, [episodes]);
+
+  // Rafraîchir les données
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await loadAnimeData();
+    setIsRefreshing(false);
+  }, [loadAnimeData]);
+
+  // Calculer la progression
+  const watchedCount = watchedEpisodes.length;
+  const totalEpisodes = anime?.episodeCount || episodes.length;
+  const progress = totalEpisodes > 0 ? (watchedCount / totalEpisodes) * 100 : 0;
+
   const handleAddToCollection = async (status: string) => {
-    if (finalAnime) {
+    if (anime) {
       if (collectionItem) {
         await updateInCollection(collectionItem.collection.id, { status });
       } else {
-        await addToCollection({ id: animeId, attributes: finalAnime }, status);
+        await addToCollection({ id: animeId, attributes: anime }, status);
       }
     }
     setModalVisible(false);
   };
-  
+
   const handleRemoveFromCollection = async () => {
     if (collectionItem) {
       await removeFromCollection(collectionItem.collection.id);
     }
     setModalVisible(false);
   };
-  
+
   const handleMarkWatched = async (episodeId: string) => {
     try {
-      console.log('Marking episode as watched:', episodeId);
-      await markEpisodeAsWatched(episodeId);
+      await databaseService.markEpisodeAsWatched(episodeId);
       
-      // Mettre à jour l'état local
       setEpisodesWithStatus(prev => 
         prev.map(ep => 
           ep.id === episodeId 
@@ -257,22 +318,17 @@ export default function AnimeDetailScreen() {
         )
       );
       
-      // Retirer de la watchlist si nécessaire
-      await removeEpisodeFromWatchlist(episodeId);
-      
+      await databaseService.removeEpisodeFromWatchlist(episodeId);
       Alert.alert('Succès', 'Épisode marqué comme visionné !');
     } catch (error) {
-      console.error('Error marking episode as watched:', error);
       Alert.alert('Erreur', 'Impossible de marquer l\'épisode comme vu.');
     }
   };
-  
+
   const handleAddToWatchlist = async (episodeId: string) => {
     try {
-      console.log('Adding episode to watchlist:', episodeId);
-      await addEpisodeToWatchlist(episodeId);
+      await databaseService.addEpisodeToWatchlist(episodeId);
       
-      // Mettre à jour l'état local
       setEpisodesWithStatus(prev => 
         prev.map(ep => 
           ep.id === episodeId 
@@ -283,11 +339,10 @@ export default function AnimeDetailScreen() {
       
       Alert.alert('Succès', 'Épisode ajouté à votre liste à regarder !');
     } catch (error) {
-      console.error('Error adding episode to watchlist:', error);
       Alert.alert('Erreur', 'Impossible d\'ajouter l\'épisode à la liste.');
     }
   };
-  
+
   const renderStatusOption = (status: string, label: string, icon: string) => (
     <TouchableOpacity
       key={status}
@@ -298,46 +353,45 @@ export default function AnimeDetailScreen() {
       <Text style={tw`text-gray-800 dark:text-gray-200 text-base`}>{label}</Text>
     </TouchableOpacity>
   );
-  
-  if (isLoading && !finalAnime) {
+
+  if (isLoading) {
     return <LoadingIndicator fullScreen text="Chargement des détails de l'anime..." />;
   }
-  
-  if (error && !finalAnime) {
+
+  if (error || !anime) {
     return (
-      <View style={tw`flex-1 items-center justify-center p-4 bg-gray-100 dark:bg-gray-900`}>
-        <Text style={tw`text-red-500 dark:text-red-400 text-center mb-4`}>
-          Erreur lors du chargement des détails.
-        </Text>
-        <TouchableOpacity
-          style={tw`bg-blue-500 px-4 py-2 rounded-lg`}
-          onPress={() => router.back()}
-        >
-          <Text style={tw`text-white`}>Retour</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={tw`flex-1 bg-gray-100 dark:bg-gray-900`}>
+        <View style={tw`flex-1 items-center justify-center p-4`}>
+          <Ionicons name="alert-circle-outline" size={64} color="#ef4444" style={tw`mb-4`} />
+          <Text style={tw`text-red-500 dark:text-red-400 text-center text-lg mb-4`}>
+            {error || 'Anime non trouvé'}
+          </Text>
+          <TouchableOpacity
+            style={tw`bg-blue-500 px-6 py-3 rounded-lg`}
+            onPress={() => router.back()}
+          >
+            <Text style={tw`text-white font-medium`}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
-  
-  if (!finalAnime) {
-    return <LoadingIndicator fullScreen text="Anime non trouvé" />;
-  }
-  
+
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100 dark:bg-gray-900`} edges={['bottom']}>
       <ScrollView
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
       >
         {/* Header avec image de couverture */}
         <View style={tw`relative w-full h-56`}>
           <Image
             source={
-              finalAnime.coverImage?.large
-                ? { uri: finalAnime.coverImage.large }
-                : finalAnime.posterImage?.medium
-                ? { uri: finalAnime.posterImage.medium }
+              anime.coverImage?.large
+                ? { uri: anime.coverImage.large }
+                : anime.posterImage?.medium
+                ? { uri: anime.posterImage.medium }
                 : { uri: "https://via.placeholder.com/800x450/CCCCCC/888888?text=Cover" }
             }
             style={tw`w-full h-full`}
@@ -355,11 +409,11 @@ export default function AnimeDetailScreen() {
           {/* Informations sur l'anime */}
           <View style={tw`absolute bottom-0 left-0 right-0 p-4`}>
             <Text style={tw`text-white text-xl font-bold`}>
-              {finalAnime.canonicalTitle}
+              {anime.canonicalTitle}
             </Text>
-            {finalAnime.titles?.ja_jp && (
+            {anime.titles?.ja_jp && (
               <Text style={tw`text-white text-sm opacity-80`}>
-                {finalAnime.titles.ja_jp}
+                {anime.titles.ja_jp}
               </Text>
             )}
           </View>
@@ -370,8 +424,8 @@ export default function AnimeDetailScreen() {
           <View style={tw`flex-row`}>
             <Image
               source={
-                finalAnime.posterImage?.medium
-                  ? { uri: finalAnime.posterImage.medium }
+                anime.posterImage?.medium
+                  ? { uri: anime.posterImage.medium }
                   : { uri: "https://via.placeholder.com/300x450/CCCCCC/888888?text=Anime" }
               }
               style={tw`w-32 h-48 rounded-lg`}
@@ -379,39 +433,39 @@ export default function AnimeDetailScreen() {
             
             <View style={tw`flex-1 ml-4`}>
               <View style={tw`flex-row flex-wrap`}>
-                {finalAnime.status && (
+                {anime.status && (
                   <View style={tw`bg-blue-100 dark:bg-blue-900 rounded-full px-3 py-1 mr-2 mb-2`}>
                     <Text style={tw`text-blue-800 dark:text-blue-200 text-xs`}>
-                      {finalAnime.status === 'finished' ? 'Terminé' : 
-                       finalAnime.status === 'current' ? 'En cours' : 
-                       finalAnime.status === 'tba' ? 'À venir' : finalAnime.status}
+                      {anime.status === 'finished' ? 'Terminé' : 
+                       anime.status === 'current' ? 'En cours' : 
+                       anime.status === 'tba' ? 'À venir' : anime.status}
                     </Text>
                   </View>
                 )}
                 
-                {finalAnime.ageRating && (
+                {anime.ageRating && (
                   <View style={tw`bg-gray-200 dark:bg-gray-700 rounded-full px-3 py-1 mr-2 mb-2`}>
                     <Text style={tw`text-gray-800 dark:text-gray-200 text-xs`}>
-                      {finalAnime.ageRating}
+                      {anime.ageRating}
                     </Text>
                   </View>
                 )}
                 
-                {finalAnime.episodeCount && (
+                {anime.episodeCount && (
                   <View style={tw`bg-gray-200 dark:bg-gray-700 rounded-full px-3 py-1 mb-2`}>
                     <Text style={tw`text-gray-800 dark:text-gray-200 text-xs`}>
-                      {finalAnime.episodeCount} épisodes
+                      {anime.episodeCount} épisodes
                     </Text>
                   </View>
                 )}
               </View>
               
               {/* Dates */}
-              {(finalAnime.startDate || finalAnime.endDate) && (
+              {(anime.startDate || anime.endDate) && (
                 <Text style={tw`text-gray-600 dark:text-gray-400 text-sm mt-1`}>
-                  {finalAnime.startDate && new Date(finalAnime.startDate).getFullYear()}
-                  {finalAnime.startDate && finalAnime.endDate && ' - '}
-                  {finalAnime.endDate && new Date(finalAnime.endDate).getFullYear()}
+                  {anime.startDate && new Date(anime.startDate).getFullYear()}
+                  {anime.startDate && anime.endDate && ' - '}
+                  {anime.endDate && new Date(anime.endDate).getFullYear()}
                 </Text>
               )}
               
@@ -452,7 +506,7 @@ export default function AnimeDetailScreen() {
               Synopsis
             </Text>
             <Text style={tw`text-gray-700 dark:text-gray-300`}>
-              {finalAnime.synopsis || "Aucun synopsis disponible."}
+              {anime.synopsis || "Aucun synopsis disponible."}
             </Text>
           </View>
           
@@ -476,9 +530,10 @@ export default function AnimeDetailScreen() {
                     id: episode.id,
                     animeId: localAnimeId || animeId,
                     number: episode.number,
-                    title: episode.title,
-                    thumbnail: episode.thumbnail,
-                    airdate: episode.air_date,
+                    title: episode.canonicalTitle || episode.title,
+                    thumbnail: episode.thumbnail?.original || episode.thumbnail,
+                    airdate: episode.airdate || episode.air_date,
+                    synopsis: episode.synopsis,
                   }}
                   isWatched={episode.isWatched}
                   inWatchlist={episode.inWatchlist}

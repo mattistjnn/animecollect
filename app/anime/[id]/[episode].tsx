@@ -1,175 +1,289 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { useRouter, useGlobalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import tw from 'twrnc';
 import { Ionicons } from '@expo/vector-icons';
-import EpisodeCard from '@/components/EpisodeCard';
+import LoadingIndicator from '@/components/ui/LoadingIndicator';
+import { useEpisodeDetails } from '@/hooks/useEpisodeDetails';
+import { formatDate, formatDuration } from '@/utils/formatters';
 
-interface Episode {
-  id: string;
-  animeId: string;
-  number: number;
-  title?: string;
-  airdate?: string;
-}
+export default function EpisodeDetailScreen() {
+  const { id, episode: episodeParam } = useGlobalSearchParams();
+  const animeId = Array.isArray(id) ? id[0] : id || '';
+  const episodeId = Array.isArray(episodeParam) ? episodeParam[0] : episodeParam || '';
+  
+  const router = useRouter();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  // Utiliser le hook personnalisé pour gérer les détails de l'épisode
+  const { data, isLoading, error, refresh, toggleWatched, toggleWatchlist } = useEpisodeDetails(animeId, episodeId);
 
-interface EpisodeListScreenProps {
-  episodes: Episode[];
-  animeTitle: string;
-  watchedEpisodeIds?: string[];
-  onToggleWatched?: (episodeId: string, watched: boolean) => void;
-}
+  // Rafraîchir les données
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await refresh();
+    setIsRefreshing(false);
+  }, [refresh]);
 
-export default function EpisodeListScreen({ 
-  episodes, 
-  animeTitle,
-  watchedEpisodeIds = [],
-  onToggleWatched 
-}: EpisodeListScreenProps) {
-  const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set(watchedEpisodeIds));
-  const [showWatchedOnly, setShowWatchedOnly] = useState(false);
-
-  const handleToggleWatched = useCallback((episodeId: string, watched: boolean) => {
-    setWatchedIds(prev => {
-      const newSet = new Set(prev);
-      if (watched) {
-        newSet.add(episodeId);
-      } else {
-        newSet.delete(episodeId);
-      }
-      return newSet;
-    });
+  // Gérer le marquage comme vu
+  const handleToggleWatched = async () => {
+    if (isUpdating || !data) return;
     
-    if (onToggleWatched) {
-      onToggleWatched(episodeId, watched);
-    }
-  }, [onToggleWatched]);
-
-  const filteredEpisodes = showWatchedOnly 
-    ? episodes.filter(ep => watchedIds.has(ep.id))
-    : episodes;
-
-  const watchedCount = watchedIds.size;
-  const totalCount = episodes.length;
-  const progressPercentage = totalCount > 0 ? (watchedCount / totalCount) * 100 : 0;
-
-  const renderHeader = () => (
-    <View style={tw`px-4 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`}>
-      <Text style={tw`text-xl font-bold text-gray-800 dark:text-white mb-2`}>
-        {animeTitle}
-      </Text>
+    try {
+      setIsUpdating(true);
+      const newWatchedState = await toggleWatched();
       
-      {/* Barre de progression */}
-      <View style={tw`mb-4`}>
-        <View style={tw`flex-row justify-between items-center mb-2`}>
-          <Text style={tw`text-sm text-gray-600 dark:text-gray-400`}>
-            Progression
-          </Text>
-          <Text style={tw`text-sm font-medium text-gray-800 dark:text-white`}>
-            {watchedCount}/{totalCount} épisodes
-          </Text>
-        </View>
-        
-        <View style={tw`w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full`}>
-          <View 
-            style={[
-              tw`h-2 bg-green-500 rounded-full`,
-              { width: `${progressPercentage}%` }
-            ]} 
-          />
-        </View>
-      </View>
+      Alert.alert(
+        'Succès', 
+        newWatchedState ? 'Épisode marqué comme visionné !' : 'Épisode marqué comme non visionné'
+      );
+      
+    } catch (error) {
+      console.error('Erreur lors du toggle watched:', error);
+      Alert.alert('Erreur', 'Impossible de mettre à jour le statut de l\'épisode');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
-      {/* Filtres */}
-      <View style={tw`flex-row`}>
-        <TouchableOpacity
-          style={[
-            tw`px-3 py-2 rounded-full flex-row items-center mr-2`,
-            !showWatchedOnly
-              ? tw`bg-blue-500`
-              : tw`bg-gray-200 dark:bg-gray-700`
-          ]}
-          onPress={() => setShowWatchedOnly(false)}
-        >
-          <Ionicons
-            name="list-outline"
-            size={16}
-            color={!showWatchedOnly ? '#ffffff' : '#6b7280'}
-            style={tw`mr-1`}
-          />
-          <Text
-            style={[
-              tw`text-sm font-medium`,
-              !showWatchedOnly
-                ? tw`text-white`
-                : tw`text-gray-700 dark:text-gray-300`
-            ]}
+  // Gérer l'ajout/suppression de la watchlist
+  const handleToggleWatchlist = async () => {
+    if (isUpdating || !data) return;
+    
+    try {
+      setIsUpdating(true);
+      const newWatchlistState = await toggleWatchlist();
+      
+      Alert.alert(
+        'Succès', 
+        newWatchlistState 
+          ? 'Épisode ajouté à votre liste à regarder' 
+          : 'Épisode retiré de votre liste à regarder'
+      );
+      
+    } catch (error) {
+      console.error('Erreur lors du toggle watchlist:', error);
+      Alert.alert('Erreur', 'Impossible de mettre à jour la liste à regarder');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Affichage du chargement
+  if (isLoading) {
+    return <LoadingIndicator fullScreen text="Chargement des détails de l'épisode..." />;
+  }
+
+  // Affichage de l'erreur
+  if (error || !data) {
+    return (
+      <SafeAreaView style={tw`flex-1 bg-gray-100 dark:bg-gray-900`}>
+        <View style={tw`flex-1 items-center justify-center p-4`}>
+          <Ionicons name="alert-circle-outline" size={64} color="#ef4444" style={tw`mb-4`} />
+          <Text style={tw`text-red-500 dark:text-red-400 text-center text-lg mb-4`}>
+            {error || 'Épisode non trouvé'}
+          </Text>
+          <TouchableOpacity
+            style={tw`bg-blue-500 px-6 py-3 rounded-lg`}
+            onPress={() => router.back()}
           >
-            Tous ({totalCount})
-          </Text>
-        </TouchableOpacity>
+            <Text style={tw`text-white font-medium`}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-        <TouchableOpacity
-          style={[
-            tw`px-3 py-2 rounded-full flex-row items-center`,
-            showWatchedOnly
-              ? tw`bg-green-500`
-              : tw`bg-gray-200 dark:bg-gray-700`
-          ]}
-          onPress={() => setShowWatchedOnly(true)}
-        >
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={16}
-            color={showWatchedOnly ? '#ffffff' : '#6b7280'}
-            style={tw`mr-1`}
-          />
-          <Text
-            style={[
-              tw`text-sm font-medium`,
-              showWatchedOnly
-                ? tw`text-white`
-                : tw`text-gray-700 dark:text-gray-300`
-            ]}
-          >
-            Vus ({watchedCount})
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderEpisode = ({ item }: { item: Episode }) => (
-    <EpisodeCard
-      episode={item}
-      isWatched={watchedIds.has(item.id)}
-      onToggleWatched={handleToggleWatched}
-    />
-  );
+  const { episode, anime, isWatched, inWatchlist } = data;
 
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-100 dark:bg-gray-900`}>
-      <FlatList
-        data={filteredEpisodes}
-        renderItem={renderEpisode}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={tw`pb-4`}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={tw`flex-1 items-center justify-center p-8`}>
-            <Ionicons
-              name="tv-outline"
-              size={64}
-              color="#9ca3af"
-              style={tw`mb-4`}
-            />
-            <Text style={tw`text-gray-700 dark:text-gray-300 text-center text-lg font-medium`}>
-              {showWatchedOnly ? 'Aucun épisode visionné' : 'Aucun épisode disponible'}
-            </Text>
-          </View>
+      <ScrollView
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
-      />
+        style={tw`flex-1`}
+      >
+        {/* Header avec bouton retour */}
+        <View style={tw`bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700`}>
+          <TouchableOpacity
+            style={tw`flex-row items-center mb-4`}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color={tw.color('gray-700 dark:gray-300')} style={tw`mr-2`} />
+            <Text style={tw`text-gray-700 dark:text-gray-300 text-base`}>Retour</Text>
+          </TouchableOpacity>
+          
+          <Text style={tw`text-xl font-bold text-gray-800 dark:text-white`}>
+            {anime.title}
+          </Text>
+          <Text style={tw`text-lg text-gray-600 dark:text-gray-400 mt-1`}>
+            Épisode {episode.number}
+            {episode.title && ` - ${episode.title}`}
+          </Text>
+        </View>
+
+        {/* Image de l'épisode */}
+        {episode.thumbnail && (
+          <View style={tw`px-4 pt-4`}>
+            <Image
+              source={{ uri: episode.thumbnail }}
+              style={tw`w-full h-48 rounded-lg bg-gray-200 dark:bg-gray-700`}
+              resizeMode="cover"
+            />
+          </View>
+        )}
+
+        {/* Informations de l'épisode */}
+        <View style={tw`p-4`}>
+          {/* Titre de l'épisode */}
+          <View style={tw`mb-4`}>
+            <Text style={tw`text-2xl font-bold text-gray-800 dark:text-white mb-2`}>
+              Épisode {episode.number}
+            </Text>
+            {episode.title && (
+              <Text style={tw`text-lg text-gray-700 dark:text-gray-300`}>
+                {episode.title}
+              </Text>
+            )}
+          </View>
+
+          {/* Métadonnées */}
+          <View style={tw`bg-white dark:bg-gray-800 rounded-lg p-4 mb-4`}>
+            <Text style={tw`text-lg font-semibold text-gray-800 dark:text-white mb-3`}>
+              Informations
+            </Text>
+            
+            {episode.air_date && (
+              <View style={tw`flex-row justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700`}>
+                <Text style={tw`text-gray-600 dark:text-gray-400`}>Date de diffusion</Text>
+                <Text style={tw`text-gray-800 dark:text-white font-medium`}>
+                  {formatDate(episode.air_date)}
+                </Text>
+              </View>
+            )}
+            
+            {episode.length && (
+              <View style={tw`flex-row justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700`}>
+                <Text style={tw`text-gray-600 dark:text-gray-400`}>Durée</Text>
+                <Text style={tw`text-gray-800 dark:text-white font-medium`}>
+                  {formatDuration(episode.length)}
+                </Text>
+              </View>
+            )}
+            
+            <View style={tw`flex-row justify-between items-center py-2`}>
+              <Text style={tw`text-gray-600 dark:text-gray-400`}>Statut</Text>
+              <View style={tw`flex-row items-center`}>
+                <View style={[
+                  tw`w-3 h-3 rounded-full mr-2`,
+                  isWatched ? tw`bg-green-500` : tw`bg-gray-400`
+                ]} />
+                <Text style={tw`text-gray-800 dark:text-white font-medium`}>
+                  {isWatched ? 'Visionné' : 'Non visionné'}
+                </Text>
+              </View>
+            </View>
+
+            {inWatchlist && !isWatched && (
+              <View style={tw`flex-row justify-between items-center py-2 border-t border-gray-200 dark:border-gray-700`}>
+                <Text style={tw`text-gray-600 dark:text-gray-400`}>Dans ma liste</Text>
+                <View style={tw`flex-row items-center`}>
+                  <Ionicons name="bookmark" size={16} color={tw.color('orange-500')} style={tw`mr-2`} />
+                  <Text style={tw`text-orange-500 font-medium`}>
+                    À regarder
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Synopsis */}
+          {episode.synopsis && (
+            <View style={tw`bg-white dark:bg-gray-800 rounded-lg p-4 mb-4`}>
+              <Text style={tw`text-lg font-semibold text-gray-800 dark:text-white mb-3`}>
+                Synopsis
+              </Text>
+              <Text style={tw`text-gray-700 dark:text-gray-300 leading-6`}>
+                {episode.synopsis}
+              </Text>
+            </View>
+          )}
+
+          {/* Boutons d'action */}
+          <View style={tw`gap-3 mt-4`}>
+            {/* Bouton marquer comme vu */}
+            <TouchableOpacity
+              style={[
+                tw`flex-row items-center justify-center py-4 px-4 rounded-lg`,
+                isWatched 
+                  ? tw`bg-green-500` 
+                  : tw`bg-blue-500`,
+                isUpdating && tw`opacity-70`
+              ]}
+              onPress={handleToggleWatched}
+              disabled={isUpdating}
+            >
+              {isUpdating ? (
+                <View style={tw`w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2`} />
+              ) : (
+                <Ionicons 
+                  name={isWatched ? "checkmark-circle" : "eye-outline"} 
+                  size={24} 
+                  color="#ffffff" 
+                  style={tw`mr-2`} 
+                />
+              )}
+              <Text style={tw`text-white font-semibold text-base`}>
+                {isWatched ? 'Marquer comme non vu' : 'Marquer comme vu'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Bouton watchlist (seulement si pas encore vu) */}
+            {!isWatched && (
+              <TouchableOpacity
+                style={[
+                  tw`flex-row items-center justify-center py-4 px-4 rounded-lg border-2`,
+                  inWatchlist 
+                    ? tw`bg-orange-500 border-orange-500` 
+                    : tw`border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800`,
+                  isUpdating && tw`opacity-70`
+                ]}
+                onPress={handleToggleWatchlist}
+                disabled={isUpdating}
+              >
+                <Ionicons 
+                  name={inWatchlist ? "bookmark" : "bookmark-outline"} 
+                  size={24} 
+                  color={inWatchlist ? "#ffffff" : tw.color('gray-600 dark:gray-400')} 
+                  style={tw`mr-2`} 
+                />
+                <Text style={[
+                  tw`font-semibold text-base`,
+                  inWatchlist 
+                    ? tw`text-white` 
+                    : tw`text-gray-600 dark:text-gray-400`
+                ]}>
+                  {inWatchlist ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Navigation vers l'anime */}
+            <TouchableOpacity
+              style={tw`bg-gray-200 dark:bg-gray-700 py-4 px-4 rounded-lg flex-row items-center justify-center`}
+              onPress={() => router.push(`/anime/${animeId}`)}
+            >
+              <Ionicons name="information-circle-outline" size={24} color={tw.color('gray-600 dark:gray-400')} style={tw`mr-2`} />
+              <Text style={tw`text-gray-600 dark:text-gray-400 font-semibold text-base`}>
+                Voir les détails de l'anime
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
