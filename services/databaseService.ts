@@ -191,6 +191,32 @@ export const getAnimeById = async (id: string): Promise<any> => {
   }
 };
 
+// Fonction améliorée pour récupérer un anime (par ID ou kitsu_id)
+export const getAnimeByIdOrKitsuId = async (id: string): Promise<any> => {
+  try {
+    const database = await initDB();
+    
+    // Essayer d'abord par ID direct
+    let result = await database.getFirstAsync(
+      'SELECT * FROM animes WHERE id = ?',
+      [id]
+    );
+    
+    // Si pas trouvé, essayer par kitsu_id
+    if (!result) {
+      result = await database.getFirstAsync(
+        'SELECT * FROM animes WHERE kitsu_id = ?',
+        [id]
+      );
+    }
+    
+    return result || null;
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'anime:', error);
+    throw error;
+  }
+};
+
 // Fonctions pour les épisodes
 export const saveEpisode = async (episode: any): Promise<string> => {
   try {
@@ -275,6 +301,79 @@ export const getEpisodeById = async (id: string): Promise<any> => {
   } catch (error) {
     console.error('Erreur lors de la récupération de l\'épisode:', error);
     throw error;
+  }
+};
+
+// Fonction pour déboguer les épisodes d'un anime
+export const debugEpisodesByAnimeId = async (animeId: string): Promise<void> => {
+  try {
+    const database = await initDB();
+    
+    console.log('🔍 Debug: Recherche épisodes pour anime ID:', animeId);
+    
+    // Vérifier d'abord si l'anime existe
+    const anime = await database.getFirstAsync(
+      'SELECT * FROM animes WHERE id = ? OR kitsu_id = ?',
+      [animeId, animeId]
+    );
+    
+    console.log('🎯 Anime trouvé:', anime);
+    
+    if (anime) {
+      // Chercher les épisodes avec l'ID de l'anime trouvé
+      const episodes = await database.getAllAsync(
+        'SELECT * FROM episodes WHERE anime_id = ? ORDER BY number',
+        [(anime as any).id]
+      );
+      
+      console.log('📺 Épisodes trouvés:', episodes.length);
+      console.log('📺 Premier épisode:', episodes[0]);
+    }
+    
+  } catch (error) {
+    console.error('❌ Erreur debug épisodes:', error);
+  }
+};
+
+// Fonction pour réparer les relations anime-épisodes
+export const repairAnimeEpisodeRelations = async (): Promise<void> => {
+  try {
+    const database = await initDB();
+    
+    console.log('🔧 Réparation des relations anime-épisodes...');
+    
+    // Récupérer tous les épisodes orphelins
+    const orphanEpisodes = await database.getAllAsync(`
+      SELECT e.*, a.id as correct_anime_id
+      FROM episodes e
+      LEFT JOIN animes a ON e.anime_id = a.id
+      WHERE a.id IS NULL
+    `);
+    
+    console.log('🔍 Épisodes orphelins trouvés:', orphanEpisodes.length);
+    
+    for (const episode of orphanEpisodes) {
+      // Essayer de trouver l'anime correct par kitsu_id
+      if ((episode as any).kitsu_id) {
+        const correctAnime = await database.getFirstAsync(
+          'SELECT * FROM animes WHERE kitsu_id = ?',
+          [(episode as any).kitsu_id.split('-')[0]] // Extraire l'ID de base
+        );
+        
+        if (correctAnime) {
+          await database.runAsync(
+            'UPDATE episodes SET anime_id = ? WHERE id = ?',
+            [(correctAnime as any).id, (episode as any).id]
+          );
+          console.log(`✅ Épisode ${(episode as any).id} réparé`);
+        }
+      }
+    }
+    
+    console.log('✅ Réparation terminée');
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la réparation:', error);
   }
 };
 

@@ -51,55 +51,51 @@ export default function AnimeDetailScreen() {
     try {
       console.log('🔍 Chargement anime ID:', animeId);
       
-      // Essayer d'abord l'API
-      let animeData = null;
-      let isLocal = false;
+      // D'abord, vérifier si on a déjà cet anime en local (priorité aux données locales)
+      const existingLocalAnime = await databaseService.getAnimeById(animeId);
       
+      if (existingLocalAnime) {
+        console.log('✅ Anime trouvé localement:', existingLocalAnime.title);
+        
+        // Utiliser les données locales
+        const animeData = {
+          canonicalTitle: existingLocalAnime.title,
+          titles: {
+            ja_jp: existingLocalAnime.original_title
+          },
+          synopsis: existingLocalAnime.synopsis,
+          posterImage: existingLocalAnime.poster_image ? { medium: existingLocalAnime.poster_image } : null,
+          coverImage: existingLocalAnime.cover_image ? { large: existingLocalAnime.cover_image } : null,
+          episodeCount: existingLocalAnime.episode_count,
+          status: existingLocalAnime.status,
+          startDate: existingLocalAnime.start_date,
+          endDate: existingLocalAnime.end_date,
+          ageRating: existingLocalAnime.age_rating
+        };
+        
+        setAnime(animeData);
+        setIsLocalData(true);
+        setLocalAnimeId(existingLocalAnime.id);
+        return; // Sortir de la fonction, on a trouvé l'anime
+      }
+      
+      // Si pas en local, essayer l'API
       try {
-        console.log('🌐 Tentative API...');
+        console.log('🌐 Tentative API pour:', animeId);
         const response = await apiService.getAnimeById(animeId);
-        animeData = {
+        const animeData = {
           id: response.data.id,
           type: response.data.type,
           ...response.data.attributes
         };
+        
+        setAnime(animeData);
+        setIsLocalData(false);
         console.log('✅ Anime récupéré via API');
         
       } catch (apiError) {
-        console.log('❌ Erreur API, tentative locale...');
-        
-        // Si l'API échoue, chercher dans la base locale
-        const localAnime = await databaseService.getAnimeById(animeId);
-        
-        if (localAnime) {
-          console.log('✅ Anime trouvé localement:', localAnime.title);
-          
-          // Convertir les données locales au format API
-          animeData = {
-            canonicalTitle: localAnime.title,
-            titles: {
-              ja_jp: localAnime.original_title
-            },
-            synopsis: localAnime.synopsis,
-            posterImage: localAnime.poster_image ? { medium: localAnime.poster_image } : null,
-            coverImage: localAnime.cover_image ? { large: localAnime.cover_image } : null,
-            episodeCount: localAnime.episode_count,
-            status: localAnime.status,
-            startDate: localAnime.start_date,
-            endDate: localAnime.end_date,
-            ageRating: localAnime.age_rating
-          };
-          
-          isLocal = true;
-          setLocalAnimeId(localAnime.id);
-        } else {
-          throw new Error('Anime non trouvé');
-        }
-      }
-      
-      if (animeData) {
-        setAnime(animeData);
-        setIsLocalData(isLocal);
+        console.log('❌ Erreur API:', apiError);
+        throw new Error('Anime non trouvé');
       }
       
     } catch (err) {
@@ -112,25 +108,30 @@ export default function AnimeDetailScreen() {
 
   // Fonction pour charger les épisodes
   const loadEpisodesData = useCallback(async () => {
-    if (!animeId) return;
+    if (!animeId || !anime) return;
     
     setIsLoadingEpisodes(true);
 
     try {
-      console.log('🔍 Chargement des épisodes...');
+      console.log('🔍 Chargement des épisodes pour:', animeId);
+      console.log('🔍 isLocalData:', isLocalData);
+      console.log('🔍 localAnimeId:', localAnimeId);
+      
       let episodesData = [];
       
-      if (isLocalData) {
+      if (isLocalData && localAnimeId) {
         // Si on utilise des données locales, récupérer les épisodes localement
         console.log('📁 Récupération des épisodes depuis la base locale...');
         
-        const localEpisodes = await databaseService.getEpisodesByAnimeId(animeId);
+        const localEpisodes = await databaseService.getEpisodesByAnimeId(localAnimeId);
         episodesData = localEpisodes.map(ep => ({
           id: ep.id,
           number: ep.number,
           canonicalTitle: ep.title,
+          title: ep.title,
           synopsis: ep.synopsis,
           airdate: ep.air_date,
+          air_date: ep.air_date,
           thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
           length: ep.length
         }));
@@ -138,33 +139,45 @@ export default function AnimeDetailScreen() {
         console.log(`✅ ${episodesData.length} épisodes récupérés localement`);
         
       } else {
-        // Sinon, essayer l'API avec fallback local
+        // Sinon, essayer l'API
         try {
           console.log('🌐 Récupération des épisodes via API...');
           const response = await apiService.getAnimeEpisodes(animeId);
           episodesData = response.data.map(episode => ({
             id: episode.id,
             type: episode.type,
-            ...episode.attributes
+            number: episode.attributes.number,
+            canonicalTitle: episode.attributes.canonicalTitle,
+            title: episode.attributes.canonicalTitle,
+            synopsis: episode.attributes.synopsis,
+            airdate: episode.attributes.airdate,
+            air_date: episode.attributes.airdate,
+            thumbnail: episode.attributes.thumbnail,
+            length: episode.attributes.length
           }));
           console.log(`✅ ${episodesData.length} épisodes récupérés via API`);
           
         } catch (apiError) {
-          console.log('❌ Erreur API pour les épisodes, tentative locale...');
-          
-          // Fallback vers les données locales
-          const localEpisodes = await databaseService.getEpisodesByAnimeId(animeId);
-          episodesData = localEpisodes.map(ep => ({
-            id: ep.id,
-            number: ep.number,
-            canonicalTitle: ep.title,
-            synopsis: ep.synopsis,
-            airdate: ep.air_date,
-            thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
-            length: ep.length
-          }));
-          
-          console.log(`✅ ${episodesData.length} épisodes récupérés localement (fallback)`);
+          console.log('❌ Erreur API pour les épisodes:', apiError);
+          // Essayer de récupérer les épisodes locaux même si l'anime vient de l'API
+          try {
+            const localEpisodes = await databaseService.getEpisodesByAnimeId(animeId);
+            episodesData = localEpisodes.map(ep => ({
+              id: ep.id,
+              number: ep.number,
+              canonicalTitle: ep.title,
+              title: ep.title,
+              synopsis: ep.synopsis,
+              airdate: ep.air_date,
+              air_date: ep.air_date,
+              thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
+              length: ep.length
+            }));
+            console.log(`✅ ${episodesData.length} épisodes récupérés localement (fallback)`);
+          } catch (localError) {
+            console.log('❌ Aucun épisode trouvé');
+            episodesData = [];
+          }
         }
       }
       
@@ -176,7 +189,7 @@ export default function AnimeDetailScreen() {
     } finally {
       setIsLoadingEpisodes(false);
     }
-  }, [animeId, isLocalData]);
+  }, [animeId, isLocalData, localAnimeId, anime]);
 
   // Charger les données au montage
   useEffect(() => {
@@ -193,7 +206,7 @@ export default function AnimeDetailScreen() {
   // Sauvegarder localement si les données viennent de l'API
   useEffect(() => {
     const saveDataLocally = async () => {
-      if (!isLocalData && anime && episodes.length > 0) {
+      if (!isLocalData && anime && episodes.length > 0 && !localAnimeId) {
         try {
           console.log('💾 Sauvegarde locale des données API...');
           
@@ -216,25 +229,35 @@ export default function AnimeDetailScreen() {
           const savedAnimeId = await databaseService.saveAnime(animeToSave);
           setLocalAnimeId(savedAnimeId);
           
-          // Sauvegarder les épisodes
+          // Sauvegarder les épisodes avec de nouveaux IDs
+          const savedEpisodes = [];
           for (let i = 0; i < episodes.length; i++) {
             const episode = episodes[i];
+            const newEpisodeId = databaseService.generateId();
+            
             const episodeToSave = {
-              id: databaseService.generateId(),
+              id: newEpisodeId,
               anime_id: savedAnimeId,
               kitsu_id: episode.id,
               number: episode.number,
-              title: episode.canonicalTitle,
+              title: episode.canonicalTitle || episode.title,
               synopsis: episode.synopsis,
-              air_date: episode.airdate,
+              air_date: episode.airdate || episode.air_date,
               thumbnail: episode.thumbnail?.original,
               length: episode.length
             };
             
             await databaseService.saveEpisode(episodeToSave);
+            
+            // Mettre à jour l'épisode avec le nouvel ID pour l'affichage
+            savedEpisodes.push({
+              ...episode,
+              id: newEpisodeId
+            });
           }
           
-          console.log('✅ Sauvegarde locale terminée');
+          setEpisodes(savedEpisodes);
+          console.log('✅ Sauvegarde locale terminée avec nouveaux IDs');
         } catch (err) {
           console.error('❌ Erreur lors de la sauvegarde locale:', err);
         }
@@ -242,7 +265,7 @@ export default function AnimeDetailScreen() {
     };
     
     saveDataLocally();
-  }, [anime, episodes, animeId, isLocalData]);
+  }, [anime, episodes, animeId, isLocalData, localAnimeId]);
 
   // Mettre à jour le statut des épisodes
   useEffect(() => {
@@ -261,6 +284,7 @@ export default function AnimeDetailScreen() {
               inWatchlist: inWatchlist
             });
           } catch (error) {
+            console.error('❌ Erreur lors de la vérification du statut pour épisode:', episode.id, error);
             episodesWithStatusData.push({
               ...episode,
               isWatched: false,
@@ -308,6 +332,7 @@ export default function AnimeDetailScreen() {
 
   const handleMarkWatched = async (episodeId: string) => {
     try {
+      console.log('🎬 Marquage épisode comme vu:', episodeId);
       await databaseService.markEpisodeAsWatched(episodeId);
       
       setEpisodesWithStatus(prev => 
@@ -321,12 +346,14 @@ export default function AnimeDetailScreen() {
       await databaseService.removeEpisodeFromWatchlist(episodeId);
       Alert.alert('Succès', 'Épisode marqué comme visionné !');
     } catch (error) {
+      console.error('❌ Erreur marquage:', error);
       Alert.alert('Erreur', 'Impossible de marquer l\'épisode comme vu.');
     }
   };
 
   const handleAddToWatchlist = async (episodeId: string) => {
     try {
+      console.log('📋 Ajout épisode à la watchlist:', episodeId);
       await databaseService.addEpisodeToWatchlist(episodeId);
       
       setEpisodesWithStatus(prev => 
@@ -339,6 +366,7 @@ export default function AnimeDetailScreen() {
       
       Alert.alert('Succès', 'Épisode ajouté à votre liste à regarder !');
     } catch (error) {
+      console.error('❌ Erreur watchlist:', error);
       Alert.alert('Erreur', 'Impossible d\'ajouter l\'épisode à la liste.');
     }
   };

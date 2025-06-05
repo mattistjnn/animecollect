@@ -28,22 +28,57 @@ export const useEpisodeDetails = (animeId: string, episodeId: string) => {
 
       console.log('🔄 Chargement des détails:', { animeId, episodeId });
 
-      // Charger l'anime
-      const animeData = await databaseService.getAnimeById(animeId);
-      if (!animeData) {
-        throw new Error('Anime non trouvé');
-      }
+      // D'abord, essayer de récupérer l'épisode directement
+      let episodeData = await databaseService.getEpisodeById(episodeId);
+      let animeData = null;
 
-      // Charger l'épisode
-      const episodeData = await databaseService.getEpisodeById(episodeId);
-      if (!episodeData) {
-        throw new Error('Épisode non trouvé');
+      if (episodeData) {
+        console.log('✅ Épisode trouvé directement:', episodeData.title || `Épisode ${episodeData.number}`);
+        
+        // Récupérer l'anime correspondant
+        animeData = await databaseService.getAnimeById(episodeData.anime_id);
+        
+        if (!animeData) {
+          throw new Error('Anime non trouvé pour cet épisode');
+        }
+      } else {
+        console.log('❌ Épisode non trouvé, tentative de récupération de l\'anime...');
+        
+        // Si l'épisode n'est pas trouvé directement, essayer de récupérer l'anime d'abord
+        animeData = await databaseService.getAnimeById(animeId);
+        
+        if (!animeData) {
+          throw new Error('Anime non trouvé');
+        }
+        
+        // Puis chercher l'épisode par anime_id et en espérant que episodeId soit en fait un numéro
+        const allEpisodes = await databaseService.getEpisodesByAnimeId(animeData.id);
+        console.log(`📊 ${allEpisodes.length} épisodes trouvés pour l'anime`);
+        
+        // Essayer de trouver l'épisode par son ID ou par son numéro
+        episodeData = allEpisodes.find(ep => 
+          ep.id === episodeId || 
+          ep.number.toString() === episodeId ||
+          ep.kitsu_id === episodeId
+        );
+        
+        if (!episodeData) {
+          // Dernier recours : prendre le premier épisode s'il y en a
+          if (allEpisodes.length > 0) {
+            console.log('⚠️ Épisode spécifique non trouvé, utilisation du premier épisode');
+            episodeData = allEpisodes[0];
+          } else {
+            throw new Error('Aucun épisode trouvé pour cet anime');
+          }
+        } else {
+          console.log('✅ Épisode trouvé par correspondance:', episodeData.title || `Épisode ${episodeData.number}`);
+        }
       }
 
       // Vérifier les statuts
       const [isWatched, inWatchlist] = await Promise.all([
-        databaseService.isEpisodeWatched(episodeId),
-        databaseService.isEpisodeInWatchlist(episodeId)
+        databaseService.isEpisodeWatched(episodeData.id),
+        databaseService.isEpisodeInWatchlist(episodeData.id)
       ]);
 
       console.log('✅ Détails chargés:', {
@@ -78,15 +113,15 @@ export const useEpisodeDetails = (animeId: string, episodeId: string) => {
       const newWatchedState = !data.isWatched;
       
       console.log('🔄 Toggle watched:', {
-        episodeId,
+        episodeId: data.episode.id,
         currentState: data.isWatched,
         newState: newWatchedState
       });
       
       if (newWatchedState) {
-        await databaseService.markEpisodeAsWatched(episodeId);
+        await databaseService.markEpisodeAsWatched(data.episode.id);
       } else {
-        await databaseService.unmarkEpisodeAsWatched(episodeId);
+        await databaseService.unmarkEpisodeAsWatched(data.episode.id);
       }
 
       // Mettre à jour l'état local
@@ -99,7 +134,7 @@ export const useEpisodeDetails = (animeId: string, episodeId: string) => {
 
       // Si marqué comme vu, retirer de la watchlist
       if (newWatchedState && data.inWatchlist) {
-        await databaseService.removeEpisodeFromWatchlist(episodeId);
+        await databaseService.removeEpisodeFromWatchlist(data.episode.id);
       }
 
       console.log('✅ Toggle watched réussi:', newWatchedState);
@@ -108,7 +143,7 @@ export const useEpisodeDetails = (animeId: string, episodeId: string) => {
       console.error('❌ Erreur lors du toggle watched:', error);
       throw error;
     }
-  }, [data, episodeId]);
+  }, [data]);
 
   // Ajouter/retirer de la watchlist
   const toggleWatchlist = useCallback(async (): Promise<boolean> => {
@@ -120,15 +155,15 @@ export const useEpisodeDetails = (animeId: string, episodeId: string) => {
       const newWatchlistState = !data.inWatchlist;
       
       console.log('🔄 Toggle watchlist:', {
-        episodeId,
+        episodeId: data.episode.id,
         currentState: data.inWatchlist,
         newState: newWatchlistState
       });
       
       if (newWatchlistState) {
-        await databaseService.addEpisodeToWatchlist(episodeId);
+        await databaseService.addEpisodeToWatchlist(data.episode.id);
       } else {
-        await databaseService.removeEpisodeFromWatchlist(episodeId);
+        await databaseService.removeEpisodeFromWatchlist(data.episode.id);
       }
 
       // Mettre à jour l'état local
@@ -143,7 +178,7 @@ export const useEpisodeDetails = (animeId: string, episodeId: string) => {
       console.error('❌ Erreur lors du toggle watchlist:', error);
       throw error;
     }
-  }, [data, episodeId]);
+  }, [data]);
 
   // Charger les données au montage
   useEffect(() => {

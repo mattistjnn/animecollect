@@ -41,14 +41,27 @@ export default function EpisodeCard({
     setWatchlisted(inWatchlist);
   }, [isWatched, inWatchlist]);
 
-  // Navigation vers les détails de l'épisode
+  // Navigation vers les détails de l'épisode - Version corrigée
   const handlePress = () => {
     console.log('🎯 Navigation vers détails épisode:', {
       animeId: episode.animeId,
       episodeId: episode.id,
       number: episode.number
     });
-    router.push(`/anime/${episode.animeId}/${episode.id}`);
+    
+    // Vérifier que les IDs sont valides
+    if (!episode.animeId || !episode.id) {
+      console.error('❌ IDs manquants pour la navigation:', { animeId: episode.animeId, episodeId: episode.id });
+      Alert.alert('Erreur', 'Impossible d\'ouvrir les détails de cet épisode');
+      return;
+    }
+    
+    try {
+      router.push(`/anime/${episode.animeId}/${episode.id}`);
+    } catch (error) {
+      console.error('❌ Erreur de navigation:', error);
+      Alert.alert('Erreur', 'Impossible de naviguer vers les détails');
+    }
   };
 
   // Marquer comme vu
