@@ -94,7 +94,7 @@ export default function AnimeDetailScreen() {
         console.log('✅ Anime récupéré via API');
         
       } catch (apiError) {
-        console.log('❌ Erreur API:', apiError);
+        // Log silencieux - pas d'erreur dans la console
         throw new Error('Anime non trouvé');
       }
       
@@ -106,7 +106,7 @@ export default function AnimeDetailScreen() {
     }
   }, [animeId]);
 
-  // Fonction pour charger les épisodes
+  // Fonction pour charger les épisodes - VERSION SILENCIEUSE
   const loadEpisodesData = useCallback(async () => {
     if (!animeId || !anime) return;
     
@@ -139,7 +139,7 @@ export default function AnimeDetailScreen() {
         console.log(`✅ ${episodesData.length} épisodes récupérés localement`);
         
       } else {
-        // Sinon, essayer l'API
+        // Sinon, essayer l'API puis fallback local SILENCIEUX
         try {
           console.log('🌐 Récupération des épisodes via API...');
           const response = await apiService.getAnimeEpisodes(animeId);
@@ -158,8 +158,7 @@ export default function AnimeDetailScreen() {
           console.log(`✅ ${episodesData.length} épisodes récupérés via API`);
           
         } catch (apiError) {
-          console.log('❌ Erreur API pour les épisodes:', apiError);
-          // Essayer de récupérer les épisodes locaux même si l'anime vient de l'API
+          // *** FALLBACK SILENCIEUX - PAS DE LOG D'ERREUR ***
           try {
             const localEpisodes = await databaseService.getEpisodesByAnimeId(animeId);
             episodesData = localEpisodes.map(ep => ({
@@ -173,9 +172,9 @@ export default function AnimeDetailScreen() {
               thumbnail: ep.thumbnail ? { original: ep.thumbnail } : null,
               length: ep.length
             }));
-            console.log(`✅ ${episodesData.length} épisodes récupérés localement (fallback)`);
+            console.log(`✅ ${episodesData.length} épisodes récupérés localement (fallback silencieux)`);
           } catch (localError) {
-            console.log('❌ Aucun épisode trouvé');
+            // Pas de log, même en cas d'échec total
             episodesData = [];
           }
         }
@@ -184,7 +183,7 @@ export default function AnimeDetailScreen() {
       setEpisodes(episodesData);
       
     } catch (err) {
-      console.error('❌ Erreur lors de la récupération des épisodes:', err);
+      // Pas de log d'erreur pour éviter le spam
       setEpisodes([]);
     } finally {
       setIsLoadingEpisodes(false);
@@ -259,7 +258,7 @@ export default function AnimeDetailScreen() {
           setEpisodes(savedEpisodes);
           console.log('✅ Sauvegarde locale terminée avec nouveaux IDs');
         } catch (err) {
-          console.error('❌ Erreur lors de la sauvegarde locale:', err);
+          // Log silencieux
         }
       }
     };
@@ -284,7 +283,7 @@ export default function AnimeDetailScreen() {
               inWatchlist: inWatchlist
             });
           } catch (error) {
-            console.error('❌ Erreur lors de la vérification du statut pour épisode:', episode.id, error);
+            // Log silencieux
             episodesWithStatusData.push({
               ...episode,
               isWatched: false,

@@ -96,7 +96,7 @@ export async function searchAnime(query: string, page = 1, limit = 20): Promise<
     
     return await response.json();
   } catch (error) {
-    console.error("Erreur lors de la recherche d'anime:", error);
+    // Erreur silencieuse - on lance juste l'erreur sans la logger
     throw error;
   }
 }
@@ -112,7 +112,7 @@ export async function getAnimeById(id: string): Promise<any> {
     
     return await response.json();
   } catch (error) {
-    console.error(`Erreur lors de la récupération de l'anime ${id}:`, error);
+    // Erreur silencieuse - on lance juste l'erreur sans la logger
     throw error;
   }
 }
@@ -128,7 +128,7 @@ export async function getAnimeEpisodes(animeId: string, page = 1, limit = 20): P
     
     return await response.json();
   } catch (error) {
-    console.error(`Erreur lors de la récupération des épisodes pour l'anime ${animeId}:`, error);
+    // Erreur silencieuse - on lance juste l'erreur sans la logger
     throw error;
   }
 }
@@ -144,7 +144,7 @@ export async function getEpisodeById(id: string): Promise<any> {
     
     return await response.json();
   } catch (error) {
-    console.error(`Erreur lors de la récupération de l'épisode ${id}:`, error);
+    // Erreur silencieuse - on lance juste l'erreur sans la logger
     throw error;
   }
 }
@@ -160,6 +160,7 @@ export async function getTrendingAnime(limit = 10): Promise<AnimeResponse> {
     
     return await response.json();
   } catch (error) {
+    // Pour les tendances, on peut garder le log car c'est critique pour l'écran d'accueil
     console.error("Erreur lors de la récupération des animes tendance:", error);
     throw error;
   }
