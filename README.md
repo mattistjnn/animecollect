@@ -1,43 +1,120 @@
-# AnimeCollect
+# AnimeCollect 📱
 
-Une application mobile pour gérer votre collection d'animés, suivre vos séries et découvrir les nouveautés.
+Une application mobile React Native moderne pour gérer votre collection d'animes, suivre votre progression et découvrir de nouveaux contenus.
 
-## 📱 Fonctionnalités
+## 🎯 Vue d'ensemble
 
-- **Découverte** : Explorez les dernières sorties d'animés
-- **Collection personnelle** : Gérez votre collection d'animés (en cours, terminés, planifiés...)
-- **Suivi** : Marquez les épisodes que vous avez visionnés
-- **Recherche** : Trouvez facilement n'importe quel anime
-- **Liste à regarder** : Gardez une liste des épisodes que vous souhaitez voir
-- **Mode hors ligne** : Consultez votre collection même sans connexion internet
+AnimeCollect est une application mobile complète qui permet aux fans d'anime de :
 
-## 🛠️ Technologies utilisées
+- Découvrir les dernières tendances et nouveautés
+- Gérer leur collection personnelle avec différents statuts (en cours, terminé, planifié, abandonné)
+- Suivre leur progression épisode par épisode
+- Maintenir une liste de visionnage hors ligne
+- Rechercher dans une vaste base de données d'animes
 
-- **React Native** avec **Expo**
-- **Expo Router** pour la navigation
-- **SQLite** avec **Drizzle ORM** pour la base de données locale
-- **TWRNC** (Tailwind CSS pour React Native) pour le stylisme
-- **Kitsu API** pour les données d'animés
+## ✨ Fonctionnalités principales
 
-## 🚀 Installation
+### 🔍 Découverte et recherche
+
+- **Tendances** : Affichage des animes populaires du moment
+- **Recherche avancée** : Recherche par titre avec suggestions en temps réel
+- **Détails complets** : Informations détaillées sur chaque anime (synopsis, nombre d'épisodes, dates de diffusion)
+
+### 📚 Gestion de collection
+
+- **Statuts multiples** : En cours, terminé, planifié, abandonné
+- **Progression automatique** : Suivi du nombre d'épisodes visionnés
+- **Statistiques** : Barres de progression et pourcentages d'avancement
+
+### 🎬 Suivi d'épisodes
+
+- **Marquage individuel** : Marquer chaque épisode comme visionné
+- **Liste de visionnage** : Garder une liste des épisodes à regarder
+- **Détails d'épisodes** : Informations complètes sur chaque épisode
+
+### 📱 Expérience utilisateur
+
+- **Mode sombre/clair** : Interface adaptative selon les préférences système
+- **Navigation intuitive** : Architecture d'onglets claire et responsive
+- **Performance optimisée** : Chargement rapide et navigation fluide
+- **Mode hors ligne** : Accès aux données même sans connexion internet
+
+## 🛠️ Architecture technique
+
+### Technologies utilisées
+
+#### Frontend
+
+- **React Native** `0.76.9` - Framework mobile multiplateforme
+- **Expo** `~52.0.46` - Plateforme de développement et déploiement
+- **Expo Router** `~4.0.20` - Navigation basée sur le système de fichiers
+- **TypeScript** `^5.3.3` - Typage statique pour une meilleure robustesse
+
+#### Style et UI
+
+- **TailwindCSS** via **TWRNC** `^4.5.1` - Framework CSS utilitaire
+- **Expo Vector Icons** `^14.0.2` - Icônes vectorielles
+- **React Navigation** `^7.0.14` - Navigation native
+
+#### Base de données et état
+
+- **SQLite** via **Expo SQLite** `~15.1.4` - Base de données locale
+- **Hooks personnalisés** - Gestion d'état réactive
+
+#### API et réseau
+
+- **Kitsu API** - Base de données d'animes
+- **Fetch API** - Requêtes HTTP sécurisées
+
+### Architecture des composants
+
+```
+app/
+├── (tabs)/                 # Navigation par onglets
+│   ├── index.tsx          # Écran des tendances
+│   ├── collection.tsx     # Gestion de collection
+│   └── search.tsx         # Recherche d'animes
+├── anime/[id].tsx         # Détails d'un anime
+├── anime/[id]/[episode].tsx # Détails d'un épisode
+└── _layout.tsx            # Layout principal
+
+components/
+├── AnimeCard.tsx          # Carte d'affichage anime
+├── EpisodeCard.tsx        # Carte d'épisode
+├── ProgressBar.tsx        # Barre de progression
+└── ui/
+    └── LoadingIndicator.tsx # Indicateur de chargement
+
+services/
+├── apiService.ts          # Interface API Kitsu
+├── databaseService.ts     # Gestion SQLite
+└── securityService.ts     # Sécurisation des requêtes
+
+hooks/
+├── useAnimeApi.ts         # Hooks pour l'API
+├── useDataBase.ts         # Hooks pour la base de données
+└── useEpisodeDetails.ts   # Gestion des détails d'épisodes
+```
+
+## 🚀 Installation et configuration
 
 ### Prérequis
 
-- Node.js (version 16 ou supérieure)
-- npm ou yarn
-- Expo CLI
-- Android Studio (pour l'émulateur Android) ou Xcode (pour le simulateur iOS)
+- **Node.js** (version 18 ou supérieure)
+- **npm** ou **yarn**
+- **Expo CLI** (`npm install -g @expo/cli`)
+- **Android Studio** (pour l'émulation Android) ou **Xcode** (pour l'émulation iOS)
 
 ### Étapes d'installation
 
-1. Clonez le dépôt :
+1. **Cloner le projet**
 
    ```bash
-   git clone https://github.com/votre-username/animecollect.git
+   git clone <repository-url>
    cd animecollect
    ```
 
-2. Installez les dépendances :
+2. **Installer les dépendances**
 
    ```bash
    npm install
@@ -45,59 +122,172 @@ Une application mobile pour gérer votre collection d'animés, suivre vos série
    yarn install
    ```
 
-3. Lancez l'application en mode développement :
+3. **Lancer l'application**
 
    ```bash
    npx expo start
    ```
 
-4. Suivez les instructions dans la console pour ouvrir l'application sur un appareil ou un émulateur.
+4. **Ouvrir sur un appareil**
+   - Scanner le QR code avec l'app Expo Go (mobile)
+   - Appuyer sur `a` pour Android ou `i` pour iOS (émulateur)
+   - Appuyer sur `w` pour ouvrir dans le navigateur
 
-## 📂 Structure du projet
+## 📋 Scripts disponibles
 
+```bash
+# Développement
+npm start                  # Démarre le serveur de développement
+npm run android           # Lance sur émulateur Android
+npm run ios              # Lance sur simulateur iOS
+npm run web              # Lance dans le navigateur
+
+# Tests
+npm test                 # Lance les tests en mode watch
+npm run lint            # Vérifie la qualité du code
+
+# Maintenance
+npm run reset-project   # Remet le projet à zéro (développement)
 ```
-app/
-├── (tabs)/                   # Écrans principaux
-├── anime/                    # Détails des animés
-├── collection/               # Vue de la collection
-├── components/               # Composants réutilisables
-├── hooks/                    # Hooks personnalisés
-├── services/                 # Services (API, base de données)
-├── utils/                    # Utilitaires
-└── db/                       # Configuration de la base de données
+
+## 🗄️ Structure de base de données
+
+### Tables principales
+
+#### `animes`
+
+- Stockage des informations d'animes (titre, synopsis, image, nombre d'épisodes)
+- Référence vers l'ID Kitsu pour synchronisation
+
+#### `episodes`
+
+- Détails des épisodes (numéro, titre, date de diffusion, miniature)
+- Relation avec la table `animes`
+
+#### `user_collection`
+
+- Collection personnelle de l'utilisateur
+- Statuts : `watching`, `completed`, `planned`, `dropped`
+- Progression et notes personnelles
+
+#### `watched_episodes`
+
+- Historique des épisodes visionnés
+- Timestamps de visionnage
+
+#### `watchlist`
+
+- Liste des épisodes à regarder
+- Système de file d'attente personnelle
+
+## 🔧 Configuration et personnalisation
+
+### Variables d'environnement
+
+L'application utilise l'API publique Kitsu qui ne nécessite pas de clé d'API.
+
+### Thèmes et styles
+
+Le style utilise TailwindCSS avec support automatique du mode sombre :
+
+```javascript
+// Exemple d'utilisation
+style={tw`bg-white dark:bg-gray-800 text-gray-900 dark:text-white`}
 ```
-
-## 📝 Notes importantes
-
-- L'application utilise Expo SDK 52 (la version 53 est encore en bêta)
-- Le mode hors ligne permet uniquement de consulter les données déjà enregistrées
-- Les APIs d'animés ne proposent généralement pas les titres en français. L'application affiche les titres originaux.
 
 ## 🧪 Tests
 
-Exécutez les tests avec la commande suivante :
+L'application inclut une suite de tests utilisant Jest et React Native Testing Library :
 
 ```bash
+# Lancer tous les tests
 npm test
-# ou
-yarn test
+
+# Tests spécifiques
+npm test -- --testNamePattern="ProgressBar"
 ```
 
-## 🛣️ Améliorations futures
+### Couverture de test
 
-- Ajout de filtres et de tris avancés pour la collection
-- Support pour les saisons et catégorisation des épisodes spéciaux/OVAs
-- Personnalisation des titres et des informations
-- Système de rappels pour les nouvelles sorties
-- Synchronisation avec des services externes
+- Tests unitaires des composants UI
+- Tests des hooks personnalisés
+- Tests d'intégration des services
+
+## 📊 Performance et optimisations
+
+### Stratégies mises en place
+
+- **Chargement différé** : Images et données chargées à la demande
+- **Cache local** : SQLite pour un accès hors ligne rapide
+- **Optimisation réseau** : Requêtes sécurisées avec gestion d'erreurs
+- **Mémoire** : Gestion efficace des états avec hooks optimisés
+
+## 🔒 Sécurité
+
+### Mesures implémentées
+
+- **Validation d'entrées** : Sanitisation de toutes les données utilisateur
+- **Requêtes sécurisées** : Validation des URLs et headers sécurisés
+- **Protection CSRF** : Headers appropriés pour les requêtes API
+- **Stockage local** : Chiffrement potentiel des données sensibles
+
+## 🛣️ Roadmap et améliorations futures
+
+### Fonctionnalités prévues
+
+- [ ] **Synchronisation cloud** : Sauvegarde de la collection sur serveur distant
+- [ ] **Système de recommandations** : Suggestions basées sur les préférences
+- [ ] **Mode social** : Partage de collections et recommandations entre utilisateurs
+- [ ] **Notifications push** : Alertes pour les nouveaux épisodes
+- [ ] **Export/Import** : Sauvegarde et restauration de données
+- [ ] **Statistiques avancées** : Graphiques et analyses de visionnage
+- [ ] **Support multi-langues** : Interface en plusieurs langues
+- [ ] **Thèmes personnalisés** : Couleurs et styles configurables
+
+### Améliorations techniques
+
+- [ ] **Migration Expo 53** : Mise à jour vers la dernière version
+- [ ] **Performance** : Optimisation du rendu et de la mémoire
+- [ ] **Tests E2E** : Tests d'intégration complets
+- [ ] **CI/CD** : Pipeline d'intégration continue
+- [ ] **Monitoring** : Suivi des erreurs et analytics
 
 ## 📄 Licence
 
 Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! Pour contribuer :
+
+1. Forkez le projet
+2. Créez une branche pour votre fonctionnalité (`git checkout -b feature/nouvelle-fonctionnalite`)
+3. Committez vos changements (`git commit -m 'Ajout nouvelle fonctionnalité'`)
+4. Poussez vers la branche (`git push origin feature/nouvelle-fonctionnalite`)
+5. Ouvrez une Pull Request
+
+### Standards de code
+
+- Utilisez TypeScript pour tout nouveau code
+- Suivez les conventions ESLint configurées
+- Ajoutez des tests pour les nouvelles fonctionnalités
+- Documentez les nouvelles API
+
+## 📞 Support
+
+Pour toute question ou problème :
+
+- Ouvrez une issue sur GitHub
+- Consultez la documentation Expo : [expo.dev](https://expo.dev)
+- Documentation React Native : [reactnative.dev](https://reactnative.dev)
+
 ## 🙏 Remerciements
 
-- [Kitsu API](https://kitsu.docs.apiary.io/) pour les données d'animés
-- [Expo](https://expo.dev/) pour le framework
-- [TailwindCSS](https://tailwindcss.com/) et [TWRNC](https://github.com/jaredh159/tailwind-react-native-classnames) pour le stylisme
-- [Drizzle ORM](https://orm.drizzle.team/) pour l'ORM SQLite
+- **[Kitsu API](https://kitsu.docs.apiary.io/)** - Fournisseur de données d'animes
+- **[Expo](https://expo.dev/)** - Plateforme de développement
+- **[TailwindCSS](https://tailwindcss.com/)** - Framework CSS
+- **Communauté React Native** - Support et ressources
+
+---
+
+Développé avec ❤️ pour la communauté anime
